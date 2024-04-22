@@ -8,6 +8,8 @@ from keras.models import load_model
 import numpy as np
 import uuid
 import pytz
+from fastapi.middleware.cors import CORSMiddleware
+
 
 app = FastAPI()
 model = load_model('accident.h5')
@@ -15,6 +17,21 @@ SQLALCHEMY_DATABASE_URL = "sqlite:///./accident.db"
 engine = create_engine(SQLALCHEMY_DATABASE_URL)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
+
+origins = [
+    "http://localhost.tiangolo.com",
+    "https://localhost.tiangolo.com",
+    "http://localhost",
+    "http://localhost:63612",
+]
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 class Location(Base):
     __tablename__ = "location"
