@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Query
+from fastapi import FastAPI, Query,HTTPException
 from pydantic import BaseModel
 from sqlalchemy import create_engine, Column, String, TIMESTAMP, text
 from sqlalchemy.ext.declarative import declarative_base
@@ -41,6 +41,15 @@ class Location(Base):
     latitude = Column(String)
     longitude = Column(String)
 
+
+
+
+class Phone_number(Base):
+    __tablename__ = "phone"
+    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    number = Column(String)  # Rename the column to "phoneNumber"
+    name = Column(String)
+
 class Rash(Base):
     __tablename__ = "rash"
     id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
@@ -51,6 +60,7 @@ class Rash(Base):
     x_tilt = Column(String)
     y_tilt = Column(String)
     z_tilt = Column(String)
+    speed = Column(String)
     label = Column(String)
 
 # Drop existing rash table and recreate it with the updated schema
@@ -64,15 +74,57 @@ class DeviceData(BaseModel):
     param4: float
     param5: float
     param6: float
+    speed: float
 
 class LocationData(BaseModel):
     latitude:float
     longitude:float
 
+class PhoneData(BaseModel):
+    phoneNumber:int
+    name: str
+
+
+
+#toput the phone number
+@app.put('/phone')
+def getPhone(item:PhoneData):
+    phone = item.phoneNumber
+    name = item.name
+    db = SessionLocal()
+    db_message = Phone_number(number = phone,name=name)
+    db.add(db_message)
+    db.commit()
+    db.refresh(db_message)
+    return db_message
+
+#to get all phone numbers
+@app.get("/phone_number")
+def get_phone_number():
+    with SessionLocal() as db:
+        phone_numbers = db.query(Phone_number).all()
+        if phone_numbers:
+            phone_data = [{"phone": phone.number, "name": phone.name,"id":phone.id} for phone in phone_numbers]
+            return phone_data
+        else:
+            return {"message": "No phone data available"}
+        
+
+@app.delete("/phone_number/{phone_number_id}")
+def delete_phone_number(phone_number_id: str):
+    with SessionLocal() as db:
+        phone_number = db.query(Phone_number).filter(Phone_number.id == phone_number_id).first()
+        if phone_number:
+            db.delete(phone_number)
+            db.commit()
+            return {"message": "Phone number deleted successfully"}
+        else:
+            raise HTTPException(status_code=404, detail="Phone number not found")
+
 #ml model data updation prediction and storing it to a db
 @app.put('/ml_model')
 def ml_model(item: DeviceData):
-    p1, p2, p3, p4, p5, p6 = item.param1, item.param2, item.param3, item.param4, item.param5, item.param6
+    p1, p2, p3, p4, p5, p6 ,speed= item.param1, item.param2, item.param3, item.param4, item.param5, item.param6,item.speed
     result = model.predict(np.array([[p1, p2, p3, p4, p5, p6]]))
     max_index = np.argmax(result)
     if max_index == 0:
