@@ -1,9 +1,10 @@
-from fastapi import Depends, FastAPI, Query,HTTPException
+import csv
+import io
+from fastapi import Depends, FastAPI,HTTPException, Response
 from pydantic import BaseModel
 from requests import Session
-from sqlalchemy import create_engine, Column, String, TIMESTAMP, select, text
+from sqlalchemy import  Column, String, TIMESTAMP, select, text
 from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import sessionmaker
 from datetime import datetime
 from keras.models import load_model
 import numpy as np
@@ -63,6 +64,20 @@ class Phone_number(Base):
 
 class Rash(Base):
     __tablename__ = "rash"
+    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    time = Column(TIMESTAMP(timezone=True), nullable=True, server_default=text('CURRENT_TIMESTAMP'))
+    x_acc = Column(String)
+    y_acc = Column(String)
+    z_acc = Column(String)
+    x_tilt = Column(String)
+    y_tilt = Column(String)
+    z_tilt = Column(String)
+    speed = Column(String)
+    label = Column(String)
+
+    
+class Sample(Base):
+    __tablename__ = "sample"
     id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
     time = Column(TIMESTAMP(timezone=True), nullable=True, server_default=text('CURRENT_TIMESTAMP'))
     x_acc = Column(String)
@@ -190,7 +205,38 @@ async def get_last_location(db: AsyncSession = Depends(get_db)):
         }
     else:
         return {"message": "No location data available"}
-                                                            
+
+
+@app.post('/sample')
+async def sample(item: DeviceData,db: AsyncSession = Depends(get_db)):
+    p1, p2, p3, p4, p5, p6,speed = item.param1, item.param2, item.param3, item.param4, item.param5, item.param6,item.speed
+    db_message = Sample(x_acc=p1, y_acc=p2, z_acc=p3, x_tilt=p4, y_tilt=p5, z_tilt=p6, speed = speed)
+    db.add(db_message)
+    await db.commit()
+    await db.refresh(db_message)
+    return db_message
+
+@app.get("/download_csv")
+async def download_csv(db: AsyncSession = Depends(get_db)):
+    # Fetch data from the database
+    data = await db.execute(select(Sample))
+    data = data.scalars().all()
+
+    # Prepare CSV data
+    output = io.StringIO()
+    fieldnames = ["id", "time", "x_acc", "y_acc", "z_acc", "x_tilt", "y_tilt", "z_tilt", "speed", "label"]
+    writer = csv.DictWriter(output, fieldnames=fieldnames)
+    writer.writeheader()
+    for row in data:
+        # Filter out _sa_instance_state
+        filtered_row = {key: getattr(row, key) for key in fieldnames if key != '_sa_instance_state'}
+        writer.writerow(filtered_row)
+
+    # Prepare response
+    output.seek(0)
+    response = Response(content=output.getvalue(), media_type="text/csv")
+    response.headers["Content-Disposition"] = "attachment; filename=data.csv"
+    return response
 
 
 if __name__ == "__main__":
