@@ -5,7 +5,7 @@ from pydantic import BaseModel
 from requests import Session
 from sqlalchemy import  Column, String, TIMESTAMP, select, text
 from sqlalchemy.ext.declarative import declarative_base
-from datetime import datetime
+from datetime import date, datetime, timedelta
 from keras.models import load_model
 import numpy as np
 import uuid
@@ -239,6 +239,19 @@ async def download_csv(db: AsyncSession = Depends(get_db)):
     response.headers["Content-Disposition"] = "attachment; filename=data.csv"
     return response
 
+@app.get("/rash_data/{target_date}")
+async def get_rash_data(target_date: date, db: AsyncSession = Depends(get_db)):
+    # Execute a query to fetch rash data for the target date asynchronously
+    query = select(Rash).where(Rash.time >= target_date, Rash.time < target_date + timedelta(days=1))
+    rash_data = await db.execute(query)
+    rash_data = rash_data.scalars().all()
+    
+    # Check if any data is fetched
+    if not rash_data:
+        raise HTTPException(status_code=404, detail="No rash data available for the specified date")
+    
+    # Return the fetched data
+    return rash_data
 
 if __name__ == "__main__":
     import uvicorn
