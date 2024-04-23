@@ -169,8 +169,9 @@ async def ml_model(item: DeviceData,db: AsyncSession = Depends(get_db)):
     tz = pytz.timezone('Asia/Kolkata')
     current_time = datetime.now(tz)
 
-    if speed > 60:
-        label = "Rash"
+    if speed:
+        if speed > 60:
+            label = "Rash"
         
     # db = SessionLocal()
     db_message = Rash(time=current_time, x_acc=p1, y_acc=p2, z_acc=p3, x_tilt=p4, y_tilt=p5, z_tilt=p6, speed = speed,label=label)
