@@ -1,9 +1,10 @@
 import csv
 import io
+from typing import Counter
 from fastapi import Depends, FastAPI,HTTPException, Response
 from pydantic import BaseModel
 from requests import Session
-from sqlalchemy import  Column, String, TIMESTAMP, select, text
+from sqlalchemy import  Column, String, TIMESTAMP, func, select, text
 from sqlalchemy.ext.declarative import declarative_base
 from datetime import date, datetime, timedelta
 from keras.models import load_model
@@ -241,17 +242,31 @@ async def download_csv(db: AsyncSession = Depends(get_db)):
 
 @app.get("/rash_data/{target_date}")
 async def get_rash_data(target_date: date, db: AsyncSession = Depends(get_db)):
-    # Execute a query to fetch rash data for the target date asynchronously
-    query = select(Rash).where(Rash.time >= target_date, Rash.time < target_date + timedelta(days=1))
-    rash_data = await db.execute(query)
-    rash_data = rash_data.scalars().all()
+    # Execute a query to fetch only the label and time of the rash data for the target date asynchronously
+    query = select(Rash.label, func.strftime('%H', Rash.time)).where(
+        Rash.time >= target_date,
+        Rash.time < target_date + timedelta(days=1)
+    )
+    result = await db.execute(query)
+    rash_data = result.fetchall()  # Use fetchall() to get raw tuples of results
     
     # Check if any data is fetched
     if not rash_data:
         raise HTTPException(status_code=404, detail="No rash data available for the specified date")
     
-    # Return the fetched data
-    return rash_data
+    hourly_data = {}
+    for label, hour in rash_data:
+        if hour not in hourly_data:
+            hourly_data[hour] = []
+        hourly_data[hour].append(label)
+
+    most_repeated_labels = {}
+    for hour, labels in hourly_data.items():
+        label_counts = Counter(labels)
+        most_common_label = label_counts.most_common(1)[0][0]
+        most_repeated_labels[hour] = most_common_label
+
+    return most_repeated_labels
 
 if __name__ == "__main__":
     import uvicorn
