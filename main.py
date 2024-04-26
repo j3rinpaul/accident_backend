@@ -131,33 +131,41 @@ async def getPhone(item:PhoneData,db:AsyncSession = Depends(get_db)):
 async def get_phone_number(db: AsyncSession = Depends(get_db)):
     phone_numbers = await db.execute(select(Phone_number))
     phone = phone_numbers.scalars().all()
-    phone_data = [{"phone": phones.number, "name": phones.name, "id": phones.id} for phones in phone]
+    phone_data = [{"phone": phones.number, "name": phones.name} for phones in phone]
 
     return phone_data
     
 
-
 @app.delete("/phone_number/{phone_number_id}")
-async def delete_phone_number(phone_number_id: str,db: AsyncSession = Depends(get_db)):
-    
-        # phone_number = db.query(Phone_number).filter(Phone_number.number == phone_number_id).first()
-        phone_number  = await db.execute(select(Phone_number).where(Phone_number.number == phone_number_id))
-        if phone_number:
-            db.delete(phone_number)
-            db.commit()
+async def delete_phone_number(phone_number_id: str, db: AsyncSession = Depends(get_db)):
+    try:
+        # Query the database to find the phone number
+        phone_number = await db.execute(select(Phone_number).where(Phone_number.number == phone_number_id))
+        phone_number_obj = phone_number.scalar_one_or_none()
+
+        if phone_number_obj:
+            # If the phone number exists, delete it
+            await db.delete(phone_number_obj)
+            await db.commit()
             return {"message": "Phone number deleted successfully"}
         else:
+            # If the phone number doesn't exist, raise a 404 error
             raise HTTPException(status_code=404, detail="Phone number not found")
+    except Exception as e:
+        # Handle any exceptions that occur during the deletion process
+        return {"error": str(e)}
+    
+
 
 #ml model data updation prediction and storing it to a db
 @app.post('/ml_model')
 async def ml_model(item: DeviceData,db: AsyncSession = Depends(get_db)):
-    p1, p2, p3, p4, p5, p6 = item.param1, item.param2, item.param3, item.param4, item.param5, item.param6
+    p1, p2, p3, p4, p5, p6,speed = item.param1, item.param2, item.param3, item.param4, item.param5, item.param6,item.speed
     if item.speed:
         speed = item.speed
     else:
         speed = None
-    result = model.predict(np.array([[p1, p2, p3, p4, p5, p6]]))
+    result = model.predict(np.array([[p1, p2, p3, p4, p5, p6,speed]]))
     max_index = np.argmax(result)
     if max_index == 0:
         label = "Normal"
@@ -170,9 +178,6 @@ async def ml_model(item: DeviceData,db: AsyncSession = Depends(get_db)):
     tz = pytz.timezone('Asia/Kolkata')
     current_time = datetime.now(tz)
 
-    if speed:
-        if speed > 60:
-            label = "Rash"
         
     # db = SessionLocal()
     db_message = Rash(time=current_time, x_acc=p1, y_acc=p2, z_acc=p3, x_tilt=p4, y_tilt=p5, z_tilt=p6, speed = speed,label=label)
@@ -267,6 +272,62 @@ async def get_rash_data(target_date: date, db: AsyncSession = Depends(get_db)):
         most_repeated_labels[hour] = most_common_label
 
     return most_repeated_labels
+
+@app.get('/pattern/{date}')
+async def get_pattern(date: date, db: AsyncSession = Depends(get_db)):
+    query = select(Rash.label, func.strftime('%H', Rash.time)).where(
+        Rash.time >= date,
+        Rash.time < date + timedelta(days=1)
+    )
+    result = await db.execute(query)
+    rash_data = result.fetchall()
+
+    percent = {}
+
+    if not rash_data:
+        raise HTTPException(status_code=404, detail="No rash data available for the specified date")
+    hourly_data = {}
+    for label, hour in rash_data:
+        if hour not in hourly_data:
+            hourly_data[hour] = []
+        hourly_data[hour].append(label)
+
+    most_repeated_labels = {}
+    for hour, labels in hourly_data.items():
+        label_counts = Counter(labels)
+        most_common_label = label_counts.most_common(1)[0][0]
+        most_repeated_labels[hour] = most_common_label
+
+    for hour,label in most_repeated_labels.items():
+        if label == "Rash":
+            percent["rash"] = percent.get("rash", 0) + 1
+        elif label == "Accident":
+            percent["accident"] = percent.get("accident", 0) + 1
+        else:
+            percent["normal"] = percent.get("normal", 0) + 1
+    
+    for key in percent:
+        percent[key] = (percent[key]/len(most_repeated_labels))*100
+
+    
+    return {"rash_percent":percent['rash']}
+
+@app.get('/speed/{date}')
+async def get_speed(date: date, db: AsyncSession = Depends(get_db)):
+    query = select(Rash.speed,Rash.time).where(
+        Rash.time >= date,
+        Rash.time < date + timedelta(days=1)
+    )
+    result = await db.execute(query)
+    speed_data = result.scalars().all()
+
+
+    if not speed_data:
+        raise HTTPException(status_code=404, detail="No speed data available for the specified date")
+    avg_speed = 0
+    for speed in speed_data:
+        avg_speed += float(speed)
+    return {"speed":avg_speed/len(speed_data)}
 
 if __name__ == "__main__":
     import uvicorn
