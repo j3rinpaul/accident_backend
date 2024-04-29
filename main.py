@@ -54,6 +54,7 @@ class Location(Base):
     time = Column(TIMESTAMP(timezone=True), nullable=True, server_default=text('CURRENT_TIMESTAMP'))
     latitude = Column(String)
     longitude = Column(String)
+    speed = Column(String)
 
 
 
@@ -107,6 +108,7 @@ class DeviceData(BaseModel):
 class LocationData(BaseModel):
     latitude:float
     longitude:float
+    speed:float
 
 class PhoneData(BaseModel):
     phoneNumber:int
@@ -191,8 +193,9 @@ async def ml_model(item: DeviceData,db: AsyncSession = Depends(get_db)):
 @app.post('/location')
 async def location_data(location: LocationData, db: Session = Depends(get_db)):
     lat = str(location.latitude)
+    speed = str(location.speed)
     longi = str(location.longitude)
-    locdb_message = Location(latitude=lat, longitude=longi)
+    locdb_message = Location(latitude=lat, longitude=longi,speed = speed)
     db.add(locdb_message)
     await db.commit()
     await db.refresh(locdb_message)
