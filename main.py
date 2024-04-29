@@ -1,16 +1,17 @@
 import csv
 import io
 from typing import Counter
-from fastapi import Depends, FastAPI,HTTPException, Response
+from fastapi import Depends, FastAPI,HTTPException, Response, WebSocket
 from pydantic import BaseModel
 from requests import Session
-from sqlalchemy import  Column, String, TIMESTAMP, func, select, text
+from sqlalchemy import  Column, String, TIMESTAMP, extract, func, select, text
 from sqlalchemy.ext.declarative import declarative_base
 from datetime import date, datetime, timedelta
 from keras.models import load_model
 import numpy as np
 import uuid
 import pytz
+# from sqlalchemy.exc import SQLAlchemyError
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.ext.asyncio import create_async_engine,async_sessionmaker,AsyncSession
 
@@ -32,7 +33,7 @@ origins = [
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=origins,
+    allow_origins=['*'],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -312,6 +313,29 @@ async def get_pattern(date: date, db: AsyncSession = Depends(get_db)):
     
     return {"rash_percent":percent['rash']}
 
+
+
+
+@app.get("/average-speed/{year}/{month}")
+async def get_average_speed(year: int, month: int,db:AsyncSession = Depends(get_db)):
+  
+    start_date = datetime(year, month, 1)
+    end_date = start_date.replace(month=start_date.month + 1) if start_date.month < 12 else start_date.replace(year=start_date.year + 1, month=1)
+
+    # Calculate the average speed for the given month
+    stmt = select(func.avg(Rash.speed)).where(
+        extract('year', Rash.time) == year,
+        extract('month', Rash.time) == month
+    )
+    result = await db.execute(stmt)
+    avg_speed = result.scalar_one_or_none()
+
+    if avg_speed is None:
+        raise HTTPException(status_code=404, detail="No speed data available for the given month")
+
+    return {"average_speed": avg_speed}
+
+
 @app.get('/speed/{date}')
 async def get_speed(date: date, db: AsyncSession = Depends(get_db)):
     query = select(Rash.speed,Rash.time).where(
@@ -328,6 +352,31 @@ async def get_speed(date: date, db: AsyncSession = Depends(get_db)):
     for speed in speed_data:
         avg_speed += float(speed)
     return {"speed":avg_speed/len(speed_data)}
+
+
+
+##############################
+clients = []
+@app.websocket("/ws")
+async def websocket_endpoint(websocket: WebSocket):
+    # Open connection
+    await websocket.accept()
+    clients.append(websocket)
+    try:
+        # Listen for messages
+        while True:
+            # Receive message from client
+            data = await websocket.receive_text()
+            # Broadcast message to all connected clients
+            for client in clients:
+                await client.send_text(data)
+    except Exception as e:
+        print(e)
+    finally:
+        # Close connection
+        clients.remove(websocket)
+
+
 
 if __name__ == "__main__":
     import uvicorn
