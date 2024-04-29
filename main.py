@@ -143,6 +143,21 @@ async def getSpeed(db:AsyncSession = Depends(get_db)):
 
 
 
+
+@app.get('/getspeed_ml')
+async def getSpeed(db:AsyncSession = Depends(get_db)):
+    last_location = await db.execute(select(Rash).order_by(Rash.time.desc()).limit(1))
+    last_location = last_location.scalars().first()
+    if last_location:
+        return {
+            "timestamp": last_location.time,
+            "speed": last_location.speed,
+        }
+    else:
+        return {"message": "No speed data available from rash db"}
+
+
+
 #to get all phone numbers
 
 @app.get("/phone_number")
