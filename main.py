@@ -227,7 +227,7 @@ async def sample(item: DeviceData,db: AsyncSession = Depends(get_db)):
 @app.get("/download_csv")
 async def download_csv(db: AsyncSession = Depends(get_db)):
     # Fetch data from the database
-    data = await db.execute(select(Sample))
+    data = await db.execute(select(Rash))
     data = data.scalars().all()
 
     # Prepare CSV data
