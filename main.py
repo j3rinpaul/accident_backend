@@ -102,7 +102,7 @@ class DeviceData(BaseModel):
     param4: float
     param5: float
     param6: float
-    speed: float | None = None
+    speed: float 
 
 class LocationData(BaseModel):
     latitude:float
@@ -162,10 +162,7 @@ async def delete_phone_number(phone_number_id: str, db: AsyncSession = Depends(g
 @app.post('/ml_model')
 async def ml_model(item: DeviceData,db: AsyncSession = Depends(get_db)):
     p1, p2, p3, p4, p5, p6,speed = item.param1, item.param2, item.param3, item.param4, item.param5, item.param6,item.speed
-    if item.speed:
-        speed = item.speed
-    else:
-        speed = None
+   
     result = model.predict(np.array([[p1, p2, p3, p4, p5, p6,speed]]))
     max_index = np.argmax(result)
     if max_index == 0:
