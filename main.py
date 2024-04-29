@@ -128,6 +128,21 @@ async def getPhone(item:PhoneData,db:AsyncSession = Depends(get_db)):
     await db.refresh(db_message)
     return db_message
 
+
+@app.get('/getspeed')
+async def getSpeed(db:AsyncSession = Depends(get_db)):
+    last_location = await db.execute(select(Location).order_by(Location.time.desc()).limit(1))
+    last_location = last_location.scalars().first()
+    if last_location:
+        return {
+            "timestamp": last_location.time,
+            "speed": last_location.speed,
+        }
+    else:
+        return {"message": "No speed data available"}
+
+
+
 #to get all phone numbers
 
 @app.get("/phone_number")
