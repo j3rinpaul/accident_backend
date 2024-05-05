@@ -2,7 +2,7 @@ import csv
 import io
 import json
 from typing import Counter
-from fastapi import Depends, FastAPI,HTTPException, Response, WebSocket
+from fastapi import Depends, FastAPI,HTTPException, Response, WebSocket, WebSocketDisconnect
 from pydantic import BaseModel
 from requests import Session
 from sqlalchemy import  Column, String, TIMESTAMP, extract, func, select, text
@@ -398,20 +398,22 @@ async def get_speed(date: date, db: AsyncSession = Depends(get_db)):
 
 ##############################
 
+websocket_connections = []
 @app.websocket("/ws/speed_location")
-async def websocket_endpoint(websocket: WebSocket,db: Session = Depends(get_db)):
-    # Open connection
+async def websocket_endpoint(websocket: WebSocket,db: AsyncSession = Depends(get_db)):
     await websocket.accept()
-    # clients.append(websocket)
+    websocket_connections.append(websocket)
     try:
         while True:
             data = await websocket.receive_text()
-            location_data = LocationData.model_validate_json(data)
-            await saveLocation(location_data, db)
-    except Exception as e:
-        print(e)
-    finally:
-        await websocket.close()
+            # Do something with the received data (e.g., broadcast to all clients)
+            location_data = json.loads(data)
+            location = Location(**location_data)
+            await saveLocation(location,db)
+            for conn in websocket_connections:
+                await conn.send_text(data)
+    except WebSocketDisconnect:
+        websocket_connections.remove(websocket)
 
 
 if __name__ == "__main__":
