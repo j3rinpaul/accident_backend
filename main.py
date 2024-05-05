@@ -1,5 +1,6 @@
 import csv
 import io
+import json
 from typing import Counter
 from fastapi import Depends, FastAPI,HTTPException, Response, WebSocket
 from pydantic import BaseModel
@@ -218,18 +219,26 @@ async def ml_model(item: DeviceData,db: AsyncSession = Depends(get_db)):
     await db.refresh(db_message)
     return db_message
 
-
-#to update the location data
-@app.post('/location')
-async def location_data(location: LocationData, db: Session = Depends(get_db)):
-    lat = str(location.latitude)
-    speed = str(location.speed)
-    longi = str(location.longitude)
-    locdb_message = Location(latitude=lat, longitude=longi,speed = speed)
+async def saveLocation(location: LocationData, db: Session = Depends(get_db)):
+    lat = location.latitude
+    speed = location.speed
+    longi = location.longitude
+    locdb_message = Location(latitude=lat, longitude=longi, speed=speed)
     db.add(locdb_message)
     await db.commit()
     await db.refresh(locdb_message)
-    return locdb_message
+
+# #to update the location data
+# @app.post('/location')
+# async def location_data(location: LocationData, db: Session = Depends(get_db)):
+#     lat = str(location.latitude)
+#     speed = str(location.speed)
+#     longi = str(location.longitude)
+#     locdb_message = Location(latitude=lat, longitude=longi,speed = speed)
+#     db.add(locdb_message)
+#     await db.commit()
+#     await db.refresh(locdb_message)
+#     return locdb_message
 
 
 #to get the last location details
@@ -388,26 +397,21 @@ async def get_speed(date: date, db: AsyncSession = Depends(get_db)):
 
 
 ##############################
-clients = []
-@app.websocket("/ws")
-async def websocket_endpoint(websocket: WebSocket):
+
+@app.websocket("/ws/speed_location")
+async def websocket_endpoint(websocket: WebSocket,db: Session = Depends(get_db)):
     # Open connection
     await websocket.accept()
-    clients.append(websocket)
+    # clients.append(websocket)
     try:
-        # Listen for messages
         while True:
-            # Receive message from client
             data = await websocket.receive_text()
-            # Broadcast message to all connected clients
-            for client in clients:
-                await client.send_text(data)
+            location_data = LocationData.model_validate_json(data)
+            await saveLocation(location_data, db)
     except Exception as e:
         print(e)
     finally:
-        # Close connection
-        clients.remove(websocket)
-
+        await websocket.close()
 
 
 if __name__ == "__main__":
