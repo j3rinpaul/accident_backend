@@ -228,17 +228,17 @@ async def saveLocation(location: LocationData, db: Session = Depends(get_db)):
     await db.commit()
     await db.refresh(locdb_message)
 
-# #to update the location data
-# @app.post('/location')
-# async def location_data(location: LocationData, db: Session = Depends(get_db)):
-#     lat = str(location.latitude)
-#     speed = str(location.speed)
-#     longi = str(location.longitude)
-#     locdb_message = Location(latitude=lat, longitude=longi,speed = speed)
-#     db.add(locdb_message)
-#     await db.commit()
-#     await db.refresh(locdb_message)
-#     return locdb_message
+#to update the location data
+@app.post('/location')
+async def location_data(location: LocationData, db: Session = Depends(get_db)):
+    lat = str(location.latitude)
+    speed = str(location.speed)
+    longi = str(location.longitude)
+    locdb_message = Location(latitude=lat, longitude=longi,speed = speed)
+    db.add(locdb_message)
+    await db.commit()
+    await db.refresh(locdb_message)
+    return locdb_message
 
 
 #to get the last location details
